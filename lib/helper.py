@@ -11,6 +11,7 @@ import multiprocessing as mp
 from sklearn.model_selection import KFold
 import matplotlib.pyplot as plt
 import logging
+import os
 
 def balance_train_data(X_train, Y_train, minimize=True):
     # assuming binary labels here
@@ -18,7 +19,7 @@ def balance_train_data(X_train, Y_train, minimize=True):
     ind_max = np.where(counts == max(counts))
     ind_min = np.where(counts == min(counts))
 
-    if counts[ind_max] / np.sum(counts) >= 0.52:
+    if len(counts[ind_max]) == 1 and counts[ind_max] / np.sum(counts) >= 0.52:
         where_max = np.where(Y_train == unique[ind_max])
         where_min = np.where(Y_train == unique[ind_min])
         min_indices = list(where_min[0])
@@ -99,13 +100,13 @@ def extract_hidden_reps(encoder, decoders, dataset, device, amlps, args):
                 hidden, _ = decoder(common_hidden)
                 aligned_hidden_reps.append(common_hidden.detach().cpu().numpy().flatten())
             else:
-                pt = i//args.n_TR
+                pt = i//args.n_timerange
                 decoders[pt].eval()
                 hidden, _=decoders[pt](common_hidden)
                 aligned_hidden_reps.append(common_hidden.detach().cpu().numpy().flatten())
 
         if amlps is not None:
-            idx = i//args.n_TR
+            idx = i//args.n_timerange
             aligned_hidden = amlps[idx](hidden)
             aligned_hidden = aligned_hidden.detach().cpu().numpy().flatten()
             aligned_hidden_reps.append(aligned_hidden)
@@ -125,7 +126,7 @@ def get_models(args):
         encoder = Encoder_basic(args.input_size, args.hidden_dim * 4, args.hidden_dim * 2, args.hidden_dim)
 
     decoders = []
-    for i in range(args.n_pt):
+    for i in range(args.n_subjects):
         if args.symm:
             decoder = Decoder_Manifold_btlnk(args.zdim, args.hidden_dim, args.hidden_dim * 2, args.hidden_dim * 4,
                                              args.input_size)
@@ -142,7 +143,7 @@ def plot_losses(args, all_losses, len_dataloader, n_timepoints, savepath):
     fig, ax = plt.subplots()
     for j, l in enumerate(['total loss', 'reconstruction loss', 'manifold_reg_loss', 'regularization loss']):
         ax.scatter(range(args.load_epoch, args.n_epochs),
-                   all_losses[:, j] * len_dataloader / n_timepoints / args.n_subject, label=l)
+                   all_losses[:, j] * len_dataloader / n_timepoints / args.n_subjects, label=l)
 
     ax.set_xlabel('epoch')
     ax.set_ylabel('loss')
@@ -153,3 +154,12 @@ def plot_losses(args, all_losses, len_dataloader, n_timepoints, savepath):
     plt.show()
     plt.savefig(os.path.join(savepath, 'all_losses'))
     logging.info(f'Finished AE training {args.n_epochs} epochs')
+
+def checkexist(targetdf, additional ):
+    if len(targetdf)<1:
+        return False
+    for key in additional.keys():
+        targetdf = targetdf.loc[targetdf[key] == additional[key]]
+        if targetdf.shape[0]<1:
+            return False
+    return True

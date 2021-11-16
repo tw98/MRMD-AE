@@ -1,11 +1,6 @@
 ###########################################################################
 ## latent manifold embedding regularized autoencoder for fMRI data
 ## one encoder, multiple decoders
-## 2021-06-25
-## Jessie Huang (create)
-## (1) manifold embedding bottleneck in per subject decoder: one common embedding (hidden dim) and individual phate operator idea
-##
-##
 ###########################################################################
 
 import warnings  # Ignore sklearn future warning
@@ -28,7 +23,7 @@ from fMRI_Manifold_downstream import downstream_analysis
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--experiment_folder', type=str, default='.')
-parser.add_argument('--n_subject', type=int, default = 17) # number of subjects
+parser.add_argument('--n_subjects', type=int, default = 17) # number of subjects
 parser.add_argument('--datapath', type = str, default = None)
 parser.add_argument('--datanaming', type=str, default = '') #file name base, s.t. filename = sub-??_datanaming
 parser.add_argument('--embedpath',type=str, default = None)
@@ -81,7 +76,7 @@ class ExperimentParameters():
 
         self.savepath = self.set_save_path(args)
 
-        self.set_checkpoint_path()
+        self.set_checkpoint_path(args)
 
     def set_ROI(self, args):
         ROIs = [
@@ -100,7 +95,7 @@ class ExperimentParameters():
         elif '_PHATE' in args.embednaming:
             return 'PHATE'
 
-    def set_hemissphere(args):
+    def set_hemissphere(self, args):
         if 'lh' in args.embednaming:
             return 'lh'
         elif 'rh' in args.embednaming:
@@ -108,11 +103,11 @@ class ExperimentParameters():
         else:
             return  'both'
 
-    def set_patient_ids(args):
+    def set_patient_ids(self, args):
         if 'StudyForrest' in args.datapath:
             return [1, 2, 3, 4, 5, 6, 9, 10, 14, 15, 16, 17, 18, 19, 20]
         else:
-            return np.arange(1,args.n_subject+1)
+            return np.arange(1,args.n_subjects+1)
 
     def set_results_df(self, args):
         self.resultsdf = pd.read_csv(args.summary_file)
@@ -134,7 +129,7 @@ class ExperimentParameters():
                   f"train_half={args.train_half}+hemisphere={self.hemisphere}")
 
     def set_save_path(self, args):
-        savepath = f'results/sherlock_{self.roi}_{args.n_subject}pt_hiddendim{args.hidden_dim}_bs{args.batch_size}_' \
+        savepath = f'results/sherlock_{self.roi}_{args.n_subjects}pt_hiddendim{args.hidden_dim}_bs{args.batch_size}_' \
                 f'{args.ae_type}_{args.reg}_reg_lam{args.lam}_manilam{args.lam_mani}'
 
         embedsource = args.embedpath.split('/')
@@ -184,7 +179,7 @@ def main():
     # set up train_half for dataset
     if args.train_half is not None:
         args.n_timerange = args.n_timerange // 2
-        if args.train_half ==1:
+        if args.train_half == 1:
             train_half = np.arange(args.n_timerange)
         else:
             train_half = np.arange(args.n_timerange, 2*args.n_timerange)
@@ -261,7 +256,7 @@ def main():
         checkpoint = torch.load(os.path.join(args.loadpath, f'ae_e{args.load_epoch}.pt'))
         encoder.load_state_dict(checkpoint['encoder_state_dict'])
 
-        for i in range(1, args.n_subject + 1):
+        for i in range(1, args.n_subjects + 1):
             decoders[i - 1].load_state_dict(checkpoint[f'decoder_{i}_state_dict'])
 
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -278,7 +273,7 @@ def main():
     reg_losses = np.array([])
     manifold_reg_losses = np.array([])
 
-    pt_list = np.arange(args.n_subject)
+    pt_list = np.arange(args.n_subjects)
 
     for epoch in range(args.load_epoch + 1, args.n_epochs + 1):
         epoch_losses = 0.0
@@ -298,14 +293,14 @@ def main():
             embed_batch = embed_batch.to(device)
 
             hidden = encoder(data_batch)
-            hiddens = [hidden[i * current_bs:(i + 1) * current_bs] for i in range(args.n_subject)]
+            hiddens = [hidden[i * current_bs:(i + 1) * current_bs] for i in range(args.n_subjects)]
 
             if args.xsubj:
                 outputs = []
                 embeds = []
-                for i in range(args.n_subject):
+                for i in range(args.n_subjects):
                     set_grad_req(decoders, i)
-                    embed, output = decoders[i](hidden) # here the embed and output are of [T_batch x n_subject, *] shape
+                    embed, output = decoders[i](hidden) # here the embed and output are of [T_batch x n_subjects, *] shape
                     outputs.append(output.reshape((len(pt_list), -1, args.input_size)))
                     embeds.append(embed.reshape((len(pt_list), -1, args.zdim)))
                 outputs = torch.stack(outputs)
@@ -314,7 +309,7 @@ def main():
             else:
                 outputs = []
                 embeds = []
-                for i in range(args.n_subject):
+                for i in range(args.n_subjects):
                     set_grad_req(decoders, i)
                     embed, output = decoders[i](hiddens[i])
                     outputs.append(output)
@@ -325,10 +320,10 @@ def main():
             loss_reg = reg_criterion(hiddens[pt_list[0]], hiddens[pt_list[1]])
 
             if args.reg_ref:
-                for z1 in range(1, args.n_subject):
+                for z1 in range(1, args.n_subjects):
                     loss_reg += reg_criterion(hiddens[pt_list[0]], hiddens[pt_list[z1]])
             else:
-                for z1 in range(1, args.n_subject - 1):  # consecutive pairs (cycle)
+                for z1 in range(1, args.n_subjects - 1):  # consecutive pairs (cycle)
                     z2 = z1 + 1
                     loss_reg += reg_criterion(hiddens[pt_list[z1]], hiddens[pt_list[z2]])
 
@@ -375,12 +370,12 @@ def main():
             epoch_reg_losses +=loss_reg.item() * data_batch.size(0)
             epoch_manifold_reg_losses += loss_manifold_reg.item() * data_batch.size(0)
             if args.xsubj:
-                epoch_trans_losses += loss_translate.item() * data_batch.size(0) / (args.n_subject - 1)
+                epoch_trans_losses += loss_translate.item() * data_batch.size(0) / (args.n_subjects - 1)
 
-        epoch_losses = epoch_losses/ (args.n_subject * args.n_timerange)  # change to report epoch loss
-        epoch_rconst_losses = epoch_rconst_losses / (args.n_subject * args.n_timerange)
-        epoch_reg_losses = epoch_reg_losses / (args.n_subject * args.n_timerange)
-        epoch_manifold_reg_losses = epoch_manifold_reg_losses/(args.n_subject * args.n_timerange)
+        epoch_losses = epoch_losses/ (args.n_subjects * args.n_timerange)  # change to report epoch loss
+        epoch_rconst_losses = epoch_rconst_losses / (args.n_subjects * args.n_timerange)
+        epoch_reg_losses = epoch_reg_losses / (args.n_subjects * args.n_timerange)
+        epoch_manifold_reg_losses = epoch_manifold_reg_losses/(args.n_subjects * args.n_timerange)
 
         logging.info(
             f"Epoch {epoch}\tLoss={epoch_losses:.4f}\tloss_rconst={epoch_rconst_losses:.4f}\ttranslate={epoch_trans_losses:.4f}\tloss_manfold_reg={epoch_manifold_reg_losses:.4f}\tloss_reg={epoch_reg_losses:.4f}")
@@ -398,13 +393,15 @@ def main():
                                    epoch)
             logging.info(f'saved checkpoint at epoch{epoch}')
 
-    del dataloader
-    del dataset
+    
     
     all_losses = np.stack((losses, rconst_losses, manifold_reg_losses, reg_losses), axis=1)
     np.save(os.path.join(param.savepath, 'all_train_losses.npy'), all_losses)
 
     plot_losses(args, all_losses, len(dataloader), len(dataset.TRs), param.savepath)
+
+    del dataloader
+    del dataset
 
     if args.downstream:
         downstream_analysis(args, param, device, encoder, decoders)
