@@ -1,5 +1,4 @@
 import torch
-from lib.fMRI import fMRIAutoencoderDataset, fMRI_Time_Subjs_Dataset
 from lib.autoencoder import Encoder_basic, Decoder_Manifold, Decoder_Manifold_btlnk, Encoder_basic_btlnk
 import numpy as np
 from scipy.stats import zscore
@@ -88,22 +87,18 @@ def extract_hidden_reps(encoder, decoders, dataset, device, amlps, args):
         input_TR = torch.from_numpy(input_TR)
         input_TR = input_TR.unsqueeze(0).unsqueeze(0)
         input_TR = input_TR.float().to(device)
-        if args.ae_type == 'conv':
-            hidden, _,_ = encoder(input_TR)
-        elif args.ae_type =='mlp':
-            hidden = encoder(input_TR)
-        elif args.ae_type =='mlp_md':
-            common_hidden = encoder(input_TR)
-            if len(decoders) == 1:
-                decoder = decoders[0]
-                decoder.eval()
-                hidden, _ = decoder(common_hidden)
-                aligned_hidden_reps.append(common_hidden.detach().cpu().numpy().flatten())
-            else:
-                pt = i//args.n_timerange
-                decoders[pt].eval()
-                hidden, _=decoders[pt](common_hidden)
-                aligned_hidden_reps.append(common_hidden.detach().cpu().numpy().flatten())
+
+        common_hidden = encoder(input_TR)
+        if len(decoders) == 1:
+            decoder = decoders[0]
+            decoder.eval()
+            hidden, _ = decoder(common_hidden)
+            aligned_hidden_reps.append(common_hidden.detach().cpu().numpy().flatten())
+        else:
+            pt = i//args.n_timerange
+            decoders[pt].eval()
+            hidden, _=decoders[pt](common_hidden)
+            aligned_hidden_reps.append(common_hidden.detach().cpu().numpy().flatten())
 
         if amlps is not None:
             idx = i//args.n_timerange
@@ -115,24 +110,16 @@ def extract_hidden_reps(encoder, decoders, dataset, device, amlps, args):
         hidden = hidden.detach().cpu().numpy().flatten()
         hidden_reps.append(hidden)
     hidden_reps = np.vstack(hidden_reps)
-    if amlps or args.ae_type=='mlp_md':
-        aligned_hidden_reps = np.vstack(aligned_hidden_reps)
+    
+    aligned_hidden_reps = np.vstack(aligned_hidden_reps)
     return hidden_reps, aligned_hidden_reps
 
 def get_models(args):
-    if args.symm:
-        encoder = Encoder_basic_btlnk(args.input_size, args.hidden_dim * 4, args.hidden_dim * 2, args.hidden_dim, args.zdim)
-    else:
-        encoder = Encoder_basic(args.input_size, args.hidden_dim * 4, args.hidden_dim * 2, args.hidden_dim)
+    encoder = Encoder_basic(args.input_size, args.hidden_dim * 4, args.hidden_dim * 2, args.hidden_dim)
 
     decoders = []
     for i in range(args.n_subjects):
-        if args.symm:
-            decoder = Decoder_Manifold_btlnk(args.zdim, args.hidden_dim, args.hidden_dim * 2, args.hidden_dim * 4,
-                                             args.input_size)
-        else:
-            decoder = Decoder_Manifold(args.zdim, args.hidden_dim, args.hidden_dim * 2, args.hidden_dim * 4,
-                                       args.input_size)
+        decoder = Decoder_Manifold(args.zdim, args.hidden_dim, args.hidden_dim * 2, args.hidden_dim * 4, args.input_size)
         decoders.append(decoder)
 
     return encoder, decoders
@@ -151,7 +138,6 @@ def plot_losses(args, all_losses, len_dataloader, n_timepoints, savepath):
     plt.yscale('log')
     plt.xscale('log')
 
-    plt.show()
     plt.savefig(os.path.join(savepath, 'all_losses'))
     logging.info(f'Finished AE training {args.n_epochs} epochs')
 

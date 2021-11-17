@@ -2,8 +2,8 @@
 
 conda activate env_fmri
 
-LAMMANI=100
-LAM=0.0
+LAMMANI=100 # manifold layer regularization
+LAM=0.0 # common embedding layer regularization
 
 for ROI in early_visual
 do

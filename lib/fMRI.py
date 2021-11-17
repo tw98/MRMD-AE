@@ -1,6 +1,4 @@
 import os
-import sys
-import csv
 import pickle
 
 import numpy as np
@@ -186,19 +184,12 @@ class fMRIAutoencoderDataset(torch.utils.data.Dataset):
         # of memory.
         timeseries = []
         for patient_id in patient_ids:
-            # print(f"loading data from patient {patient_id} into memory")
             if data_3d:
                 path = os.path.join(data_path, f"patient{patient_id}.npy")
                 timeseries.append(np.load(path)[TRs])
             else:
-                if 'sherlock' in data_path:
-                    path = os.path.join(data_path, f"sub-{patient_id:02}_{data_name_suffix}")
-                    timeseries.append(np.load(path)[TRs])
-
-                elif 'StudyForrest' in data_path:
-                    path = os.path.join(data_path, f"sub-{patient_id:02}_early_visual_movie_all_runs.npy")
-                    data_loaded = np.load(path).T
-                    timeseries.append(data_loaded[TRs].astype(float))
+                path = os.path.join(data_path, f"sub-{patient_id:02}_{data_name_suffix}")
+                timeseries.append(np.load(path)[TRs])
             
         self.timeseries = np.concatenate(timeseries, axis=0)
 
@@ -273,18 +264,10 @@ class fMRI_Time_Subjs_Dataset(torch.utils.data.Dataset):
                 path = os.path.join(data_path, f"patient{patient_id}.npy")
                 timeseries.append(np.load(path)[TRs])
             else:
-                if 'sherlock' in data_path:
-                    path = os.path.join(data_path, f"sub-{patient_id:02}_early_visual_sherlock_movie.npy")
-                    if len(fnbase)>1:
-                        path = os.path.join(data_path, f"sub-{patient_id:02}_"+fnbase)
-                    timeseries.append(np.load(path)[TRs])
-
-                elif 'StudyForrest' in data_path:
-                    path = os.path.join(data_path, f"sub-{patient_id:02}_early_visual_movie_all_runs.npy")
-                    if len(fnbase)>1:
-                        path = os.path.join(data_path, f"sub-{patient_id:02}_"+fnbase)
-                    data_loaded = np.load(path).T
-                    timeseries.append(data_loaded[TRs].astype(float))
+                path = os.path.join(data_path, f"sub-{patient_id:02}_early_visual_sherlock_movie.npy")
+                if len(fnbase)>1:
+                    path = os.path.join(data_path, f"sub-{patient_id:02}_"+fnbase)
+                timeseries.append(np.load(path)[TRs])
             
         timeseries = np.concatenate(timeseries, axis=0)
 
@@ -355,15 +338,8 @@ class fMRI_Time_Subjs_Embed_Dataset(torch.utils.data.Dataset):
                 path = os.path.join(data_path, f"patient{patient_id}.npy")
                 timeseries.append(np.load(path)[TRs])
             else:
-
-                if 'sherlock' in data_path:
-                    path = os.path.join(data_path, f"sub-{patient_id:02}_{data_name_suffix}")
-                    timeseries.append(np.load(path)[TRs])
-
-                elif 'StudyForrest' in data_path:
-                    path = os.path.join(data_path, f"sub-{patient_id:02}_early_visual_movie_all_runs.npy")
-                    data_loaded = np.load(path).T
-                    timeseries.append(data_loaded[TRs].astype(float))
+                path = os.path.join(data_path, f"sub-{patient_id:02}_{data_name_suffix}")
+                timeseries.append(np.load(path)[TRs])
 
         timeseries = np.concatenate(timeseries, axis=0)
 
@@ -386,7 +362,6 @@ class fMRI_Time_Subjs_Embed_Dataset(torch.utils.data.Dataset):
 
         for patient_id in patient_ids:
             path = os.path.join(embed_path, f"sub-{patient_id:02}_{emb_name_suffix}")
-            # this is in datapath /gpfs/milgram/scratch60/turk-browne/neuromanifold/sherlock/MNI152_3mm_data/embeddings_organized/MNI
             # embeds.append(np.load(path)[TRs]) # The new embedding is in splits
             embeds.append(np.load(path))
         embeds = np.concatenate(embeds, axis=0)

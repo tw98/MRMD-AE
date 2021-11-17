@@ -22,52 +22,45 @@ from fMRI_Manifold_downstream import downstream_analysis
 
 parser = argparse.ArgumentParser()
 
+parser.add_argument('--seed', type = int, default = 0)
+
 parser.add_argument('--experiment_folder', type=str, default='.')
-parser.add_argument('--n_subjects', type=int, default = 17) # number of subjects
-parser.add_argument('--datapath', type = str, default = None)
-parser.add_argument('--datanaming', type=str, default = '') #file name base, s.t. filename = sub-??_datanaming
-parser.add_argument('--embedpath',type=str, default = None)
-parser.add_argument('--embednaming', type=str, default = '')
-parser.add_argument('--summary_file', type=str, default='./fMRI_manifold_AE_summary.csv')
+parser.add_argument('--n_subjects', type=int, default=16) # number of subjects
+parser.add_argument('--datapath', type = str, default='./data/ROI_data/early_visual/fMRI')
+parser.add_argument('--datanaming', type=str, default='early_visual_sherlock_movie.npy') #file name base, s.t. filename = sub-??_datanaming
+parser.add_argument('--embedpath',type=str, default='./data/ROI_data/early_visual/embedding')
+parser.add_argument('--embednaming', type=str, default='')
+parser.add_argument('--summary_file', type=str, default='./results/fMRI_manifold_AE_summary.csv')
 
-parser.add_argument('--n_timerange', type = int, default = 1976) # number of timepoints in dataset
-parser.add_argument('--train_half', type = int, default = None) # train_half = 1 is first half, 2 is second half
-parser.add_argument('--hidden_dim', type = int, default = 64) # dimension of common embedding layer
-parser.add_argument('--zdim', type = int, default =2) # dimension of bottleneck manifold layer
+parser.add_argument('--n_timerange', type = int, default=1976) # number of timepoints in dataset
+parser.add_argument('--train_half', type = int, default=None) # train_half = 1 is first half, 2 is second half
+parser.add_argument('--hidden_dim', type = int, default=64) # dimension of common embedding layer
+parser.add_argument('--zdim', type = int, default=20) # dimension of bottleneck manifold layer
 
-parser.add_argument('--batch_size', type = int, default = 16) 
-parser.add_argument('--n_epochs', type = int, default = 10)
-parser.add_argument('--lr', type = float, default = 0.001)
-parser.add_argument('--lam', type = float, default = 10) # common embedding layer regularization parameter
-parser.add_argument('--lam_mani', type = float, default = 1) # individual manifold layerregularization parameter
-parser.add_argument('--lam_decay', type = float, default = 1) # regularization decay factor
+parser.add_argument('--batch_size', type = int, default=64) 
+parser.add_argument('--n_epochs', type = int, default=4000)
+parser.add_argument('--lr', type = float, default=0.001)
+parser.add_argument('--lam', type = float, default=10) # common embedding layer regularization parameter
+parser.add_argument('--lam_mani', type = float, default=1) # individual manifold layerregularization parameter
+parser.add_argument('--lam_decay', type = float, default=1) # regularization decay factor
 
 parser.add_argument('--save_model', action='store_true')
 parser.add_argument('--save_freq', type = int, default = 1)
-parser.add_argument('--loadpath', type =str, default=None) #directory that saves checkpoints e.g. results/sherlock_viz_17pt_hiddendim64_bs64_20epochs_reg_lam0.001_1half
+parser.add_argument('--loadpath', type =str, default=None) #directory that saves checkpoints
 parser.add_argument('--load_epoch', type = int, default=0)
 
-parser.add_argument('--seed', type = int, default = 0)
-
 parser.add_argument('--shuffle_reg', action='store_true')
-
-parser.add_argument('--ae_type', type =str, default='mlp_md') # choices: 'conv', 'mlp', 'mlp_md' (mlp with manifold bottleneck decoder)
-parser.add_argument('--reg', type = str, default = 'mse') #choices: 'mse', 'pear'(for peason corr), 'mmd'
 parser.add_argument('--reg_ref', action = 'store_true') # for regularization, use pt[0] (shuffle or not) as reference; if not activated, random nonoverlapping pairs cycle
-
-parser.add_argument('--downstream', action = 'store_true') #follow with downstream analyses
-parser.add_argument('--labelpath', type = str, default=None)
-parser.add_argument('--amlp', action='store_true') # if the model uses alignment mlp layers, choose this.
-parser.add_argument('--symm', action='store_true') # symmetric autoencoder design
-parser.add_argument('--input_size', type = int, default = None)
+parser.add_argument('--labelpath', type = str, default='./data/sherlock_labels_coded_expanded.csv')
 parser.add_argument('--xsubj', action='store_true', help='train for cross subject, decode all subject input using all subjects decoders')
 parser.add_argument('--lam_xsubj', type = float, default=1)
+parser.add_argument('--downstream', action = 'store_true') #follow with downstream analyses
+parser.add_argument('--input_size', type = int, default=0)
 
 class ExperimentParameters():
     def __init__(self, args) -> None:
         self.roi = self.set_ROI(args)
         self.manifoldtype = self.set_manifold(args)
-        self.hemisphere = self.set_hemissphere(args)
         self.data_3d = False
 
         self.patient_ids = self.set_patient_ids(args)
@@ -95,19 +88,8 @@ class ExperimentParameters():
         elif '_PHATE' in args.embednaming:
             return 'PHATE'
 
-    def set_hemissphere(self, args):
-        if 'lh' in args.embednaming:
-            return 'lh'
-        elif 'rh' in args.embednaming:
-            return 'rh'
-        else:
-            return  'both'
-
     def set_patient_ids(self, args):
-        if 'StudyForrest' in args.datapath:
-            return [1, 2, 3, 4, 5, 6, 9, 10, 14, 15, 16, 17, 18, 19, 20]
-        else:
-            return np.arange(1,args.n_subjects+1)
+        return np.arange(1,args.n_subjects+1)
 
     def set_results_df(self, args):
         self.resultsdf = pd.read_csv(args.summary_file)
@@ -118,19 +100,18 @@ class ExperimentParameters():
                                   ]
         if args.xsubj:
             self.resultsdf = self.resultsdf.loc[self.resultsdf.lam_trans==args.lam_xsubj]
-        if self.hemisphere in ['lh','rh']:
-            self.resultsdf = self.resultsdf.loc[self.resultsdf['HEM']==self.hemisphere]
+
         if self.resultsdf.shape[0]>0:
             print(f"The combination has run: {self.roi}+{self.manifoldtype}+commonhid={args.hidden_dim}+zdim={args.zdim}+commonlam={args.lam}+manilam={args.lam_mani}",
-                  f"train_half={args.train_half}+hemisphere={self.hemisphere}")
+                  f"train_half={args.train_half}")
             exit()
         else:
             print(f"Running combination: {self.roi}+{self.manifoldtype}+commonhid={args.hidden_dim}+zdim={args.zdim}+commonlam={args.lam}+manilam={args.lam_mani}",
-                  f"train_half={args.train_half}+hemisphere={self.hemisphere}")
+                  f"train_half={args.train_half}")
 
     def set_save_path(self, args):
         savepath = f'results/sherlock_{self.roi}_{args.n_subjects}pt_hiddendim{args.hidden_dim}_bs{args.batch_size}_' \
-                f'{args.ae_type}_{args.reg}_reg_lam{args.lam}_manilam{args.lam_mani}'
+                f'reg_lam{args.lam}_manilam{args.lam_mani}'
 
         embedsource = args.embedpath.split('/')
         SRMstate = ''
@@ -165,7 +146,6 @@ class ExperimentParameters():
         logging.info(f'checkpoints save to: {self.chkpt_savepath}')
 
 
-
 def main():
     # params
     args = parser.parse_args()
@@ -173,7 +153,6 @@ def main():
     param = ExperimentParameters(args)
 
     if os.path.exists(args.summary_file):
-
         param.set_results_df()  
 
     # set up train_half for dataset
@@ -209,17 +188,11 @@ def main():
     logging.info(f"Network params: hidden dim={args.hidden_dim}, manifold embedding dim={args.zdim}")
     logging.info(f"batch size={args.batch_size}, lr={args.lr}, seed={args.seed}")
     logging.info(f'save checkpoint: {args.save_model}')
-    logging.info(f'common embedding regularization: {args.reg}')
 
     if args.lam==0:
         logging.info(f'common embedding regularization not used.')
     if args.train_half is not None:
         logging.info(f'TR: {train_half[0]}-{train_half[-1]}')
-
-    if args.ae_type=='conv':
-        data_3d = True
-    else: 
-        data_3d = False
 
     embed_name_suffix = args.embednaming
     dataset = fMRI_Time_Subjs_Embed_Dataset(param.patient_ids,
@@ -227,16 +200,15 @@ def main():
                                             args.embedpath,
                                             train_half,
                                             emb_name_suffix=embed_name_suffix,
-                                            data_3d=data_3d,
+                                            data_3d=param.data_3d,
                                             data_name_suffix = args.datanaming)
 
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
-    input_size = dataset.get_TR_dims()[0]
-    args.input_size = input_size
+    args.input_size = dataset.get_TR_dims()[0]
     embed_size = dataset.get_embed_dims()
     args.zdim = embed_size # this is to set the manifold embedding shape
 
-    logging.info(f"input size={input_size}")
+    logging.info(f"input size={args.input_size}")
     logging.info(f"manifold embedding size={args.zdim}")
 
     encoder, decoders = get_models(args)
@@ -392,13 +364,12 @@ def main():
                                    os.path.join(param.chkpt_savepath, 'ae_e%d.pt' % epoch),
                                    epoch)
             logging.info(f'saved checkpoint at epoch{epoch}')
-
     
     
     all_losses = np.stack((losses, rconst_losses, manifold_reg_losses, reg_losses), axis=1)
     np.save(os.path.join(param.savepath, 'all_train_losses.npy'), all_losses)
 
-    plot_losses(args, all_losses, len(dataloader), len(dataset.TRs), param.savepath)
+    # plot_losses(args, all_losses, len(dataloader), len(dataset.TRs), param.savepath)
 
     del dataloader
     del dataset

@@ -5,28 +5,23 @@ import torch
 import logging
 from lib.fMRI import fMRIAutoencoderDataset
 import os
-from lib.helper import extract_hidden_reps, drive_decoding, get_models
-from lib.downstream_measures import time_segment_matching, ISC
+from lib.helper import extract_hidden_reps, drive_decoding
 import pandas as pd
 
 
 def downstream_analysis(args, param, device, encoder, decoders):
     # record all results
-
     cols = ['data', 'n_subjects', 'train_half', 'common_hiddendim','manifold_embed_dim',
-            'common_latent_regularization', 'lambda_common', 'manifold_regularization', 
-            'lambda_mani', 'manifold_type', 'ROI', 'HEM', 'encoder', 'decoder', 'reg_shuffle', 
-            'load_path', 'load_epoch', 'lam_trans'
+            'lambda_common', 'lambda_mani', 'lam_trans', 
+            'ROI', 'reg_shuffle', 'load_path', 'load_epoch', 
             ]
 
     datasource = '/'.join(args.embedpath.split('/')[-6:-1])
 
     entry = [
         datasource, args.n_subjects, args.train_half, args.hidden_dim, args.zdim,
-        args.reg, args.lam, 'mse', args.lam_mani,
-        param.manifoldtype, param.roi, param.hemisphere,
-        args.ae_type, args.ae_type, args.shuffle_reg, param.chkpt_savepath, args.n_epochs,
-        args.lam_xsubj
+        args.lam, args.lam_mani, args.lam_xsubj,
+        param.roi, args.shuffle_reg, param.chkpt_savepath, args.n_epochs,
         ]
 
     if os.path.exists(args.summary_file):
@@ -51,10 +46,7 @@ def downstream_analysis(args, param, device, encoder, decoders):
     logging.info(f'apply trained model on {args.train_half} half to data[{train_half[0]}-{train_half[-1]}]')
 
     # load dataset
-    if 'StudyForrest' in args.datapath:
-        param.patient_ids = [1, 2, 3, 4, 5, 6, 9, 10, 14, 15, 16, 17, 18, 19, 20]
-    else:
-        param.patient_ids = np.arange(1, args.n_subjects + 1)
+    param.patient_ids = np.arange(1, args.n_subjects + 1)
 
     dataset = fMRIAutoencoderDataset(param.patient_ids,
                                     args.datapath,
@@ -72,8 +64,7 @@ def downstream_analysis(args, param, device, encoder, decoders):
     hidden, al_hidden = extract_hidden_reps(encoder, decoders, dataset, device, latent_mlps, args)
     hidden = hidden.reshape(args.n_subjects, args.n_timerange, -1) # hidden is all patients, and interested timepoints
 
-    if args.amlp or args.ae_type == 'mlp_md':
-        al_hidden = al_hidden.reshape(args.n_subjects, args.n_timerange, -1)
+    al_hidden = al_hidden.reshape(args.n_subjects, args.n_timerange, -1)
 
     print('hidden representation shape: ',hidden.shape)
     datatype = os.path.split(args.datapath)[-1]
@@ -85,30 +76,13 @@ def downstream_analysis(args, param, device, encoder, decoders):
     resultsdf.loc[len(resultsdf)-1, 'hiddenfile'] = saveto
     print('saved extracted latent representation to : ', saveto)
     logging.info (f'saved extracted latent representation to : {saveto}')
-    tsm = np.nan
-    isc = np.nan
-    tsm_std = np.nan
-    isc_std = np.nan
-    if args.amlp or args.ae_type == 'mlp_md': # the amlp in mlp_md case is the common embedding
-        saveto = os.path.join(args.loadpath,
-                                f'{datatype}_{modeldata}_model_on_{args.train_half}half_data_e{args.load_epoch}_amlp.npy')
-        np.save(saveto, al_hidden)
-        resultsdf.loc[len(resultsdf) - 1, 'aligned_hiddenfile'] = saveto
-        print('amlp hidden saved to: ', saveto)
-        logging.info(f"aligned encoder latent representation saved to: {saveto}")
 
-        tsm = time_segment_matching(al_hidden)
-        tsm_std = tsm.std()
-        tsm = tsm.mean()
-
-        isc = ISC(al_hidden)
-        isc_std = isc.std()
-        isc = isc.mean()
-
-    resultsdf.loc[len(resultsdf)-1, 'tsm_mean' ]=tsm
-    resultsdf.loc[len(resultsdf) - 1, 'tsm_std']=tsm_std
-    resultsdf.loc[len(resultsdf) - 1, 'isc_mean']=isc
-    resultsdf.loc[len(resultsdf) - 1, 'isc_std']=isc_std
+    saveto = os.path.join(args.loadpath,
+                            f'{datatype}_{modeldata}_model_on_{args.train_half}half_data_e{args.load_epoch}_amlp.npy')
+    np.save(saveto, al_hidden)
+    resultsdf.loc[len(resultsdf) - 1, 'aligned_hiddenfile'] = saveto
+    print('amlp hidden saved to: ', saveto)
+    logging.info(f"aligned encoder latent representation saved to: {saveto}")
 
     # SVC prediction
     if args.labelpath is None:
