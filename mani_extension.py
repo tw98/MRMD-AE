@@ -18,24 +18,23 @@ from lib.utils import set_grad_req
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--n_TR', type = int, default = 1976)
-parser.add_argument('--train_percent', type=int, default=90)
-parser.add_argument('--seed', type = int, default = 0)
+parser.add_argument('--seed', type = int, default=0)
 parser.add_argument('--ROI', type = str, default = 'early_visual')
-parser.add_argument('--hidden_dim', type = int, default = 64)
-parser.add_argument('--zdim', type = int, default = 20)
-parser.add_argument('--n_pt', type = int, default = 16)
-parser.add_argument('--volsurf', type = str, default='MNI152_3mm_data') # default is volumetric data , alternatively fsaverage_data for surface data
-parser.add_argument('--input_size', type = int, default = None)
-parser.add_argument('--batch_size', type = int, default =64)
+parser.add_argument('--n_subjects', type = int, default=16)
+parser.add_argument('--patient', type=int, default=None)
+parser.add_argument('--n_timerange', type = int, default=1976)
+parser.add_argument('--train_percent', type=int, default=90)
+parser.add_argument('--hidden_dim', type = int, default=64)
+parser.add_argument('--zdim', type = int, default=20)
+parser.add_argument('--input_size', type = int, default=None)
+parser.add_argument('--batch_size', type = int, default=64)
 parser.add_argument('--symm', action ='store_true') # use the symmetric config for encoder as decoder, so the latent encoder dim is the same as manifold dim
 parser.add_argument('--lr', type = float, default=0.001)
-parser.add_argument('--lam', type = float, default = 0)
-parser.add_argument('--lam_mani', type = float, default = 1)
-parser.add_argument('--n_epochs', type = int, default = 4000)
+parser.add_argument('--lam', type = float, default=0)
+parser.add_argument('--lam_mani', type = float, default=1)
+parser.add_argument('--n_epochs', type = int, default=4000)
 parser.add_argument('--shuffle_reg', action='store_true')
 parser.add_argument('--ind_mrAE', action='store_true', help='set active to train independent MR-AE')
-parser.add_argument('--pt', type=int, default=None)
 parser.add_argument('--consecutive_time', action ='store_true', help='set active to make consecutive times e.g. 50% train will be first half of time series')
 parser.add_argument('--oneAE', action='store_true', help='use a single autoencoder')
 parser.add_argument('--reg_ref', action = 'store_true')
@@ -52,34 +51,34 @@ def main():
     if args.ind_mrAE:
         # if independent mr-AE is used
         outfile = 'results/ind_mrAE_insubject_mani_extension.csv'
-        if args.pt is None:
+        if args.patient is None:
             print('ERROR: need to specify subject when indepent mrAE is trained, set --pt=?')
             return
-        args.n_pt = 1
+        args.n_subjects = 1
     if args.oneAE:
         print('using one encoder one decoder setup')
         outfile = 'results/oneAE_insubject_mani_extension.csv'
 
-    embedpath = "/gpfs/milgram/scratch60/turk-browne/jh2752/data"
-    if not os.path.exists(embedpath):
-        os.makedirs(embedpath)
-
-    path_trainTRs = f"/gpfs/milgram/scratch60/turk-browne/jh2752/data/sherlock_{args.train_percent}_trainTRs.npy"
+    path_trainTRs = f"./data/mani_extension/data/sherlock_{args.train_percent}_trainTRs.npy"
     if args.consecutive_time:
-        path_trainTRs = f"/gpfs/milgram/scratch60/turk-browne/jh2752/data/sherlock_{args.train_percent}_consec_trainTRs.npy"
+        path_trainTRs = f"./data/mani_extension/data/sherlock_{args.train_percent}_consec_trainTRs.npy"
     if not os.path.exists(path_trainTRs):
         if not args.consecutive_time:
-            trainTRs = np.random.choice(args.n_TR, int(args.n_TR*args.train_percent/100), replace=False)
+            trainTRs = np.random.choice(args.n_timerange, int(args.n_timerange*args.train_percent/100), replace=False)
         else:
-            trainTRs = np.arange(int(args.n_TR*args.train_percent/100))
+            trainTRs = np.arange(int(args.n_timerange*args.train_percent/100))
         trainTRs.sort()
         np.save(path_trainTRs, trainTRs)
     else:
         trainTRs = np.load(path_trainTRs)
-    testTRs = np.setxor1d(np.arange(args.n_TR), trainTRs)
+    testTRs = np.setxor1d(np.arange(args.n_timerange), trainTRs)
     testTRs.sort()
 
-    datapath = f"/gpfs/milgram/scratch60/turk-browne/neuromanifold/sherlock/{args.volsurf}/denoised_filtered_smoothed/ROI_data/{args.ROI}/data"
+    embedpath = "./data/mani_extension/data"
+    if not os.path.exists(embedpath):
+        os.makedirs(embedpath)
+
+    datapath = f"data/ROI_data/{args.ROI}/fMRI"
     datanaming = f"{args.ROI}_sherlock_movie.npy"
     embednaming = f"{args.ROI}_{args.zdim}dimension_{args.train_percent}_train_PHATE.npy"
     if args.consecutive_time:
@@ -88,7 +87,7 @@ def main():
 
     if not os.path.exists(os.path.join(embedpath, f"sub-01_{embednaming}")):
         print( 'prepare train embed data')
-        for pt in range(1,args.n_pt+1):
+        for pt in range(1,args.n_subjects+1):
             X = np.load(os.path.join(datapath, f"sub-{pt:02}_{datanaming}"))[trainTRs]
             pop = phate.PHATE(n_components = args.zdim)
             X_p = pop.fit_transform(X)
@@ -101,8 +100,7 @@ def main():
             np.save(os.path.join(embedpath,testphate_file),
                     Xtest_p) # the test is phate landmark interpolation Xtest_p
 
-    savepath = f"/gpfs/milgram/scratch60/turk-browne/tw496/results/sherlock_{args.volsurf}" \
-               f"_{args.ROI}_mani_extend_{args.train_percent}"
+    savepath = f"./data/mani_extension/models/sherlock_MNI152_3mm_data_{args.ROI}_mani_extend_{args.train_percent}"
     if args.consecutive_time:
         savepath =savepath+'_consec'
     if args.oneAE:
@@ -120,7 +118,7 @@ def main():
     if args.ind_mrAE:
         print('training individual mr-AE')
         cols.append('subject')
-        entry.append(args.pt)
+        entry.append(args.patient)
 
     if os.path.exists(outfile):
         outdf_old = pd.read_csv(outfile)
@@ -133,9 +131,11 @@ def main():
     else: 
         outdf_old = None
 
-    patient_ids = np.arange(1,args.n_pt+1)
+    patient_ids = np.arange(1,args.n_subjects+1)
     if args.ind_mrAE:
-        patient_ids = [args.pt]
+        patient_ids = [args.patient]
+    
+    # load training timepoints and train autoencoder
     dataset = fMRI_Time_Subjs_Embed_Dataset(patient_ids,
                                             datapath,
                                             embedpath,
@@ -224,15 +224,18 @@ def main():
             loss_reconstruct = criterion(torch.stack(outputs).view(data_batch.shape), data_batch)
             loss_manifold_reg = mr_criterion(torch.stack(embeds).view(embed_batch.shape), embed_batch )
 
-            loss =loss_reconstruct + args.lam_mani*loss_manifold_reg
+            loss=loss_reconstruct + args.lam_mani*loss_manifold_reg
+            
             if args.lam>0:
                 loss+=args.lam*loss_reg
+
             loss.backward()
             optimizer.step()
 
             epoch_losses += loss.item() * data_batch.size(0)
             epoch_rconst_losses += loss_reconstruct.item()*data_batch.size(0)
             epoch_manifold_reg_losses += loss_manifold_reg.item() * data_batch.size(0)
+
             if args.lam>0:
                 epoch_reg_loss += loss_reg.item()*data_batch.size(0)
 
@@ -254,7 +257,7 @@ def main():
 
     lossfile = f'mrmdAE_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}_all_train_losses.npy'
     if args.ind_mrAE:
-        lossfile = f'ind_mrAE_sub-{args.pt:02}_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}_all_train_losses.npy'
+        lossfile = f'ind_mrAE_sub-{args.patient:02}_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}_all_train_losses.npy'
     np.save(os.path.join(savepath, lossfile), all_losses)
 
     modeldict = {'encoder_state_dict': encoder.state_dict()}
@@ -265,10 +268,10 @@ def main():
 
     ckptfile = f"mrmdAE_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}.pt"
     if args.ind_mrAE:
-        ckptfile = f'ind_mrAE_sub-{args.pt:02}_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}.pt'
+        ckptfile = f'ind_mrAE_sub-{args.patient:02}_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}.pt'
     torch.save(modeldict, os.path.join(savepath, ckptfile))
 
-    # test on test TR and record the test embeddings
+    # test on test timepoints and record the test embeddings
     dataset = fMRIAutoencoderDataset(patient_ids,
                                      datapath,
                                      testTRs,
@@ -276,11 +279,11 @@ def main():
                                      data_name_suffix=datanaming)
     encoder.eval()
     hidden, al_hidden = extract_hidden_reps(encoder, decoders, dataset, device, None, args)
-    hidden = hidden.reshape(args.n_pt, len(testTRs), -1)
+    hidden = hidden.reshape(args.n_subjects, len(testTRs), -1)
 
     if args.ind_mrAE:
         hidden = hidden.reshape(len(testTRs), -1)
-        hiddenfile = f"ind_mrAE_sub-{args.pt:02}_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}_testhidden.npy"
+        hiddenfile = f"ind_mrAE_sub-{args.patient:02}_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}_testhidden.npy"
     else: 
         hiddenfile = f"mrmdAE_{args.hidden_dim}_{args.zdim}_lam{args.lam}_manilam{args.lam_mani}_symm{args.symm}_testhidden.npy"
     np.save(os.path.join(savepath, hiddenfile ), hidden)
@@ -299,6 +302,3 @@ def main():
 
 if __name__=='__main__':
     main()
-
-
-

@@ -1,17 +1,5 @@
 #!/bin/bash
-
-##SBATCH --partition=psych_day
-#SBATCH --job-name=oneAE_me
-#SBATCH --output=results/oneAE_me.txt
-#SBATCH --mail-type=ALL
-#SBATCH --mail-user=tom.wallenstein@yale.edu
-#SBATCH --time=23:59:00
-#SBATCH -c 8
-#SBATCH --mem=80G
-
-
-module load miniconda
-conda activate tjl
+conda activate env_fmri
 
 BS=64
 NEPOCHS=100
@@ -42,7 +30,7 @@ LAM=0 #
 LAMMANI=100
 for ROI in early_visual # aud_early pmc_nn
 do
-  for TRAINPCT in 90 70 50 30 10
+  for TRAINPCT in 70 50 30 10
   do
     for PT in {1..16}
     do

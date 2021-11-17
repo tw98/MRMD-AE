@@ -12,20 +12,19 @@ import os
 from sklearn.metrics.pairwise import euclidean_distances
 from sklearn.metrics import mean_squared_error
 import phate
-import time
 from lib.helper import checkexist
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--n_TR', type = int, default = 1976)
-parser.add_argument('--train_percent', type=int, default=90)
+parser.add_argument('--new', action ='store_true')
+parser.add_argument('--n_timerange', type = int, default=1976)
+parser.add_argument('--train_percent', type=int, default=50)
 parser.add_argument('--ROI', type = str, default = 'early_visual')
 parser.add_argument('--hidden_dim', type = int, default = 64)
 parser.add_argument('--zdim', type = int, default = 20)
 parser.add_argument('--n_pt', type = int, default = 16)
-parser.add_argument('--volsurf', type = str, default='MNI152_3mm_data') # default is volumetric data , alternatively fsaverage_data for surface data
 parser.add_argument('--symm', action ='store_true') # use the symmetric config for encoder as decoder, so the latent encoder dim is the same as manifold dim
-parser.add_argument('--lam', type = float, default = 0)
-parser.add_argument('--lam_mani', type = float, default = 1)
+parser.add_argument('--lam', type = float, default=0.0)
+parser.add_argument('--lam_mani', type = float, default=100)
 parser.add_argument('--consecutive_time', action ='store_true', help='set active to make consecutive times e.g. 50% train will be first half of time series')
 parser.add_argument('--ind_mrAE', action='store_true', help='set active to compare independent MR-AE')
 parser.add_argument('--oneAE', action = 'store_true', help='one encoder one decoder set up (vanilla AE or mr-AE)')
@@ -43,20 +42,20 @@ def get_metric(dist_matrix):
 def main():
     args = parser.parse_args()
 
-    datapath = f"/gpfs/milgram/scratch60/turk-browne/neuromanifold/sherlock/{args.volsurf}/denoised_filtered_smoothed/ROI_data/{args.ROI}/data"
+    datapath = f"./data/ROI_data/{args.ROI}/fMRI"
     datanaming = f"{args.ROI}_sherlock_movie.npy"
-    truephatepath = "/gpfs/milgram/scratch60/turk-browne/jh2752/data"
-    truephatenaming = f"{args.ROI}_{args.zdim}dimension_PHATE.npy"
-    savepath = f"/gpfs/milgram/scratch60/turk-browne/jh2752/results/sherlock_{args.volsurf}_{args.ROI}_mani_extend_{args.train_percent}"
-    embednaming = f"{args.ROI}_{args.zdim}dimension_{args.train_percent}_train_PHATE.npy"
+    truephatepath = "./data/mani_extension/data"
+    truephatenaming = f"{args.ROI}_20dimension_PHATE.npy"
 
-    path_trainTRs = f"/gpfs/milgram/scratch60/turk-browne/jh2752/data/sherlock_{args.train_percent}_trainTRs.npy"
+    savepath = f"./data/mani_extension/models/sherlock_MNI152_3mm_data_{args.ROI}_mani_extend_{args.train_percent}"
+    embednaming = f"{args.ROI}_20dimension_{args.train_percent}_train_PHATE.npy"
+
+    path_trainTRs = f"data/mani_extension/data/sherlock_{args.train_percent}_trainTRs.npy"
     if args.consecutive_time:
-        path_trainTRs = f"/gpfs/milgram/scratch60/turk-browne/jh2752/data/sherlock_{args.train_percent}_consec_trainTRs.npy"
+        path_trainTRs = f"./data/mani_extension/data/sherlock_{args.train_percent}_consec_trainTRs.npy"
 
-    
     # check if PHATE ground truth manifold has been computed before
-    if not os.path.exists(os.path.join(truephatepath,f"sub-01_{truephatenaming}")):
+    if args.new or not os.path.exists(os.path.join(truephatepath,f"sub-01_{truephatenaming}")):
         print('prepare ground truth phate embeddings')
         for pt in range(1, args.n_pt+1):
             X = np.load(os.path.join(datapath, f"sub-{pt:02}_{datanaming}"))
@@ -72,7 +71,7 @@ def main():
 
 
     trainTRs = np.load(path_trainTRs)
-    testTRs = np.setxor1d(np.arange(args.n_TR), trainTRs)
+    testTRs = np.setxor1d(np.arange(args.n_timerange), trainTRs)
     testTRs.sort()
 
     # get the test TRs manifold euc distance to each of the other
@@ -113,7 +112,6 @@ def main():
 
         if not checkexist(outdf, dict(zip(cols[:3],entry[:3]))):
             outdf.loc[len(outdf)]=entry
-
     else: 
         print(f"{entry} has run")
 
