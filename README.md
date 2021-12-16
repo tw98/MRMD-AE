@@ -1,5 +1,3 @@
-# ICLR 2022: LEARNING SHARED NEURAL MANIFOLDS FROM MULTI-SUBJECT FMRI DATA
-
 This codebase has the purpose to allow readers to reproduce our experiments. 
 
 ## Requirements/Setup
